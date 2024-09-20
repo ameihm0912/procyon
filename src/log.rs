@@ -2,11 +2,11 @@ use std::sync::mpsc;
 
 pub enum LogMessage {
     Message(String),
-    Shutdown(())
+    Shutdown(()),
 }
 
 pub struct Log {
-    rx: mpsc::Receiver<LogMessage>
+    rx: mpsc::Receiver<LogMessage>,
 }
 
 impl Log {

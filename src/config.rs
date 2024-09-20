@@ -7,8 +7,8 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new() -> Result<Self,ConfigError> {
-        Ok(Config{
+    pub fn new() -> Result<Self, ConfigError> {
+        Ok(Config {
             socket_addr: env::var("SOCKET_ADDR")?,
             channel: env::var("CHANNEL")?,
         })
@@ -16,7 +16,7 @@ impl Config {
 }
 
 pub enum ConfigError {
-    VarError(std::env::VarError)
+    VarError(std::env::VarError),
 }
 
 impl From<std::env::VarError> for ConfigError {
@@ -28,8 +28,7 @@ impl From<std::env::VarError> for ConfigError {
 impl fmt::Display for ConfigError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ConfigError::VarError(e) =>
-                write!(f, "{}", e),
+            ConfigError::VarError(e) => write!(f, "{}", e),
         }
     }
 }

@@ -3,5 +3,5 @@ pub enum SocketMessage {
     Output(String),
     Disconnected(()),
     WantDisconnected(()),
-    Error(())
+    Error(()),
 }

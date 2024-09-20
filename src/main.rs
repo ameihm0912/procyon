@@ -1,20 +1,20 @@
+use std::io::BufRead;
+use std::io::BufReader;
+use std::io::Write;
+use std::net::TcpStream;
+use std::sync::mpsc;
 use std::thread;
 use std::time;
-use std::sync::mpsc;
-use std::net::TcpStream;
-use std::io::BufReader;
-use std::io::BufRead;
-use std::io::Write;
 
 mod config;
-mod log;
 mod irc;
+mod log;
 mod socket;
 
 #[derive(PartialEq)]
 enum Status {
     Disconnected,
-    Connected
+    Connected,
 }
 
 struct State<'a> {
@@ -23,7 +23,7 @@ struct State<'a> {
     logtx: &'a mpsc::Sender<log::LogMessage>,
 
     conn: Option<std::net::TcpStream>,
-    conn_attempts: i32
+    conn_attempts: i32,
 }
 
 impl<'a> State<'a> {
@@ -33,7 +33,7 @@ impl<'a> State<'a> {
             status: Status::Disconnected,
             logtx: logtx,
             conn: None,
-            conn_attempts: 0
+            conn_attempts: 0,
         }
     }
 }
@@ -42,14 +42,17 @@ fn net_conn(state: &mut State) {
     if state.status != Status::Disconnected {
         return;
     }
-    log::log(state.logtx, format!("attempting connection to {}", state.cfg.socket_addr).as_str());
+    log::log(
+        state.logtx,
+        format!("attempting connection to {}", state.cfg.socket_addr).as_str(),
+    );
 
     match TcpStream::connect(&state.cfg.socket_addr) {
         Ok(fd) => {
             log::log(state.logtx, "TCP connection established");
             state.conn = Some(fd);
             state.status = Status::Connected;
-        },
+        }
         Err(e) => {
             log::log(state.logtx, format!("connection failed: {}", e).as_str());
         }
@@ -67,14 +70,18 @@ fn socket_handler(state: &mut State) -> bool {
             match rdr.read_line(&mut input) {
                 Ok(l) => {
                     if l == 0 {
-                        readtx.send(socket::SocketMessage::Disconnected(())).unwrap();
+                        readtx
+                            .send(socket::SocketMessage::Disconnected(()))
+                            .unwrap();
                         break;
                     }
-                    readtx.send(socket::SocketMessage::Input(input.clone().
-                            replace("\n", "").
-                            replace("\r", ""))).unwrap();
+                    readtx
+                        .send(socket::SocketMessage::Input(
+                            input.clone().replace("\n", "").replace("\r", ""),
+                        ))
+                        .unwrap();
                     input.clear();
-                },
+                }
                 Err(_) => {
                     readtx.send(socket::SocketMessage::Error(())).unwrap();
                     break;
@@ -83,7 +90,8 @@ fn socket_handler(state: &mut State) -> bool {
         }
     });
 
-    let (mut ircproc, itx) = irc::Irc::new(stx.clone(), state.logtx.clone(), state.cfg.channel.clone());
+    let (mut ircproc, itx) =
+        irc::Irc::new(stx.clone(), state.logtx.clone(), state.cfg.channel.clone());
     let irct = thread::spawn(move || ircproc.run());
     itx.send(irc::IrcMessage::Register(())).unwrap();
 
@@ -95,7 +103,7 @@ fn socket_handler(state: &mut State) -> bool {
             socket::SocketMessage::Input(s) => {
                 log::log(state.logtx, format!("socket input: {}", s).as_str());
                 itx.send(irc::IrcMessage::Message(s)).unwrap();
-            },
+            }
             socket::SocketMessage::Output(s) => {
                 log::log(state.logtx, format!("socket output: {}", s).as_str());
                 write!(state.conn.as_ref().unwrap(), "{}\r\n", s).unwrap();
@@ -103,14 +111,17 @@ fn socket_handler(state: &mut State) -> bool {
             socket::SocketMessage::Error(_) => {
                 log::log(state.logtx, "socket error, returning from socket handler");
                 break;
-            },
+            }
             socket::SocketMessage::WantDisconnected(_) => {
                 should_exit = true;
                 log::log(state.logtx, "pquit, sending QUIT command");
                 write!(state.conn.as_ref().unwrap(), "QUIT :Leaving\r\n").unwrap();
-            },
+            }
             socket::SocketMessage::Disconnected(_) => {
-                log::log(state.logtx, "socket disconnected, returning from socket handler");
+                log::log(
+                    state.logtx,
+                    "socket disconnected, returning from socket handler",
+                );
                 itx.send(irc::IrcMessage::Shutdown(())).unwrap();
                 break;
             }
@@ -137,7 +148,7 @@ fn run(cfg: &config::Config) {
                 }
                 log::log(&logtx, "status is disconnected, sleeping for network retry");
                 thread::sleep(time::Duration::from_secs(5));
-            },
+            }
             Status::Connected => {
                 state.conn_attempts = 0;
                 if socket_handler(&mut state) {

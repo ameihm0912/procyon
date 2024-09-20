@@ -1,8 +1,8 @@
+use crate::log;
+use crate::socket;
 use std::sync::mpsc;
 use std::thread;
 use std::time;
-use crate::socket;
-use crate::log;
 
 pub enum IrcMessage {
     Message(String),
@@ -11,30 +11,30 @@ pub enum IrcMessage {
     Shutdown(()),
 }
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 enum ChannelStatus {
     NotJoined,
     Attempting,
-    Joined
+    Joined,
 }
 
 struct Source {
-    nick: Option<String>
+    nick: Option<String>,
 }
 
 impl Source {
     fn new(source: String) -> Self {
         let mut s = source.clone();
         if s.chars().next().unwrap() != ':' {
-            return Source { nick: None }
+            return Source { nick: None };
         }
         s.remove(0);
         let parts = s.split("!").collect::<Vec<&str>>();
         if parts.len() != 2 {
-            return Source { nick: None }
+            return Source { nick: None };
         }
         Source {
-            nick: Some(parts[0].to_string())
+            nick: Some(parts[0].to_string()),
         }
     }
 
@@ -51,39 +51,50 @@ pub struct Irc {
 
     registered: bool,
     channel: String,
-    channel_status: ChannelStatus
+    channel_status: ChannelStatus,
 }
 
 impl Irc {
     pub fn new(
         stx: mpsc::Sender<socket::SocketMessage>,
         ltx: mpsc::Sender<log::LogMessage>,
-        channel: String) -> (Self, mpsc::Sender<IrcMessage>) {
+        channel: String,
+    ) -> (Self, mpsc::Sender<IrcMessage>) {
         let (itx, irx) = mpsc::channel();
-        (Irc {
-            irx: irx,
-            itx: itx.clone(),
-            stx: stx,
-            ltx: ltx,
+        (
+            Irc {
+                irx: irx,
+                itx: itx.clone(),
+                stx: stx,
+                ltx: ltx,
 
-            registered: false,
-            channel: channel,
-            channel_status: ChannelStatus::NotJoined
-        }, itx)
+                registered: false,
+                channel: channel,
+                channel_status: ChannelStatus::NotJoined,
+            },
+            itx,
+        )
     }
 
     fn send_registration(&self) {
-        self.stx.send(
-            socket::SocketMessage::Output("NICK procyon".to_string())).unwrap();
-        self.stx.send(
-            socket::SocketMessage::Output("USER procyon @ procyon :procyon".to_string())).unwrap();
+        self.stx
+            .send(socket::SocketMessage::Output("NICK procyon".to_string()))
+            .unwrap();
+        self.stx
+            .send(socket::SocketMessage::Output(
+                "USER procyon @ procyon :procyon".to_string(),
+            ))
+            .unwrap();
     }
 
     pub fn channel(&mut self) {
         if self.channel_status != ChannelStatus::NotJoined {
             return;
         }
-        log::log(&self.ltx, format!("attemping to join {}", self.channel).as_str());
+        log::log(
+            &self.ltx,
+            format!("attemping to join {}", self.channel).as_str(),
+        );
         self.channel_status = ChannelStatus::Attempting;
         let j = format!("JOIN :{}", self.channel);
         self.stx.send(socket::SocketMessage::Output(j)).unwrap();
@@ -96,7 +107,7 @@ impl Irc {
                 IrcMessage::Message(s) => {
                     let parts = s.split(" ").collect::<Vec<&str>>();
                     if parts.len() < 2 {
-                        continue
+                        continue;
                     }
 
                     if parts[0] == "PING" {
@@ -110,37 +121,42 @@ impl Irc {
                         "001" => {
                             log::log(&self.ltx, "registration successful");
                             self.registered = true;
-                        },
+                        }
                         "JOIN" => {
                             if source.is_me() {
                                 self.channel_status = ChannelStatus::Joined;
-                                log::log(&self.ltx, format!("{} marked as joined", self.channel).as_str());
+                                log::log(
+                                    &self.ltx,
+                                    format!("{} marked as joined", self.channel).as_str(),
+                                );
                             }
-                        },
+                        }
                         "KICK" => {
                             if parts[3] == "procyon" {
                                 self.channel_status = ChannelStatus::NotJoined;
                             }
-                        },
+                        }
                         "PRIVMSG" => {
                             if parts[3] == ":pquit" {
-                                self.stx.send(socket::SocketMessage::WantDisconnected(())).unwrap();
+                                self.stx
+                                    .send(socket::SocketMessage::WantDisconnected(()))
+                                    .unwrap();
                             }
                         }
-                        _ => { }
+                        _ => {}
                     }
-                },
+                }
                 IrcMessage::Control(_) => {
                     log::log(&self.ltx, "received control message");
                     schedule_control(&self.itx);
                     if !self.registered {
-                        continue
+                        continue;
                     }
                     self.channel();
-                },
+                }
                 IrcMessage::Register(_) => {
                     self.send_registration();
-                },
+                }
                 IrcMessage::Shutdown(_) => {
                     log::log(&self.ltx, "returning from IRC thread");
                     break;
