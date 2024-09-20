@@ -1,7 +1,6 @@
 use std::sync::mpsc;
 use std::thread;
 use std::time;
-use std::cell::RefCell;
 use crate::socket;
 use crate::log;
 
@@ -52,7 +51,7 @@ pub struct Irc {
 
     registered: bool,
     channel: String,
-    channel_status: RefCell<ChannelStatus>
+    channel_status: ChannelStatus
 }
 
 impl Irc {
@@ -69,7 +68,7 @@ impl Irc {
 
             registered: false,
             channel: channel,
-            channel_status: RefCell::new(ChannelStatus::NotJoined)
+            channel_status: ChannelStatus::NotJoined
         }, itx)
     }
 
@@ -80,19 +79,19 @@ impl Irc {
             socket::SocketMessage::Output("USER procyon @ procyon :procyon".to_string())).unwrap();
     }
 
-    pub fn channel(&self) {
-        let mut c = self.channel_status.borrow_mut();
-        if *c != ChannelStatus::NotJoined {
+    pub fn channel(&mut self) {
+        if self.channel_status != ChannelStatus::NotJoined {
             return;
         }
         log::log(&self.ltx, format!("attemping to join {}", self.channel).as_str());
-        *c = ChannelStatus::Attempting;
+        self.channel_status = ChannelStatus::Attempting;
         let j = format!("JOIN :{}", self.channel);
         self.stx.send(socket::SocketMessage::Output(j)).unwrap();
     }
 
     pub fn run(&mut self) {
-        for msg in self.irx.iter() {
+        loop {
+            let msg = self.irx.recv().unwrap();
             match msg {
                 IrcMessage::Message(s) => {
                     let parts = s.split(" ").collect::<Vec<&str>>();
@@ -114,13 +113,13 @@ impl Irc {
                         },
                         "JOIN" => {
                             if source.is_me() {
-                                *self.channel_status.borrow_mut() = ChannelStatus::Joined;
+                                self.channel_status = ChannelStatus::Joined;
                                 log::log(&self.ltx, format!("{} marked as joined", self.channel).as_str());
                             }
                         },
                         "KICK" => {
                             if parts[3] == "procyon" {
-                                *self.channel_status.borrow_mut() = ChannelStatus::NotJoined;
+                                self.channel_status = ChannelStatus::NotJoined;
                             }
                         },
                         "PRIVMSG" => {
