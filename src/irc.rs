@@ -29,12 +29,12 @@ impl Source {
             return Source { nick: None };
         }
         s.remove(0);
-        let parts = s.split("!").collect::<Vec<&str>>();
-        if parts.len() != 2 {
+        let parts = s.split_once("!");
+        if parts.is_none() {
             return Source { nick: None };
         }
         Source {
-            nick: Some(parts[0].to_string()),
+            nick: Some(parts.unwrap().0.to_string()),
         }
     }
 
